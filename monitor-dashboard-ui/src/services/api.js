@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Instancia base de Axios apuntando a tu backend ASP.NET Core
+// En producción leerá la URL de Render; en local usará localhost:5259
 const api = axios.create({
-  baseURL: 'http://localhost:5259/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5259/api',
   headers: {
     'Content-Type': 'application/json'
   }
