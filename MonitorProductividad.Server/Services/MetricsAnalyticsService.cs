@@ -224,7 +224,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         {
             if (lastProc != null && r.ProcessName != lastProc)
             {
-                string hourKey = r.DeviceTimestamp.ToLocalTime().ToString("HH:00");
+                // Forzamos la zona horaria a UTC-5 (Perú/Colombia) sin importar dónde esté el servidor
+                string hourKey = r.DeviceTimestamp.AddHours(-5).ToString("HH:00");
                 if (hourlyDict.ContainsKey(hourKey))
                     hourlyDict[hourKey]++;
                 else
@@ -253,7 +254,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         return registros.Select(r => new TelemetryLogDto
         {
-            Time = r.DeviceTimestamp.ToLocalTime().ToString("HH:mm:ss"),
+            // Forzamos a UTC-5
+            Time = r.DeviceTimestamp.AddHours(-5).ToString("HH:mm:ss"),
             Process = r.ProcessName,
             Window = string.IsNullOrWhiteSpace(r.WindowTitle) ? "—" : r.WindowTitle,
             Cpu = $"{Math.Round(r.CpuPercentage, 1)}%",
