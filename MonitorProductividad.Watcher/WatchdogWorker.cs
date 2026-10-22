@@ -11,10 +11,10 @@ namespace MonitorProductividad.Watcher
     public class WatchdogWorker : BackgroundService
     {
         private readonly ILogger<WatchdogWorker> _logger;
-        // Nombre exacto del archivo ejecutable del agente de usuario (sin el .exe)
+        // Nombre exacto del proceso del agente
         private const string AgentProcessName = "MonitorProductividad.Agent"; 
-        // Ruta absoluta donde se compilará el agente para que el servicio lo encuentre
-        private const string AgentPath = @"D:\Proyectos\Pruebas\MonitorProductividad.Agent.exe"; 
+        // Ruta de instalación final en el entorno de despliegue
+        private const string AgentPath = @"C:\Program Files\MonitorTesis\MonitorProductividad.Agent.exe";
 
         public WatchdogWorker(ILogger<WatchdogWorker> logger)
         {

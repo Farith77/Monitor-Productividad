@@ -37,6 +37,22 @@ namespace MonitorProductividad.Agent.Trackers
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
+        // Lista de procesos nativos de Windows que ensucian la telemetría
+        private static readonly HashSet<string> ProcesosDelSistema = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "explorer",
+            "lockapp",
+            "systemsettings",
+            "applicationframehost",
+            "textinputhost",
+            "searchapp",
+            "startmenuexperiencehost",
+            "shellexperiencehost",
+            "windowsterminal",
+            "conhost",
+            "searchhost" // Agregado común en Windows 11
+        };
+
         /// <summary>
         /// Obtiene la ventana y proceso actualmente en primer plano (Foreground).
         /// </summary>
@@ -101,15 +117,16 @@ namespace MonitorProductividad.Agent.Trackers
 
                 if (string.IsNullOrWhiteSpace(titulo)) return true;
 
-                // 3. Obtener PID y nombre del ejecutable
+                // 3. Obtener PID
                 GetWindowThreadProcessId(hWnd, out uint pid);
-                string processName = "desconocido.exe";
+                string rawProcessName = "desconocido";
 
+                // 4. Buscar el nombre real del proceso PRIMERO
                 try
                 {
                     using (var proc = Process.GetProcessById((int)pid))
                     {
-                        processName = proc.ProcessName + ".exe";
+                        rawProcessName = proc.ProcessName;
                     }
                 }
                 catch
@@ -117,17 +134,19 @@ namespace MonitorProductividad.Agent.Trackers
                     // El proceso pudo cerrarse antes de resolver el nombre
                 }
 
-                // Excluir elementos estructurales del shell de Windows
-                if (processName.Equals("explorer.exe", StringComparison.OrdinalIgnoreCase) && 
-                    (titulo == "Program Manager" || titulo == ""))
+                //  filtro con el nombre real (sin el .exe)
+                if (ProcesosDelSistema.Contains(rawProcessName))
                 {
-                    return true;
+                    return true; // En lugar de 'continue', se usa 'return true' para saltar al siguiente en EnumWindows
                 }
+
+                // Si superó el filtro, le agregamos el .exe para guardar en BD
+                string finalProcessName = rawProcessName + ".exe";
 
                 ventanas.Add(new VentanaItem
                 {
                     Pid = (int)pid,
-                    ProcessName = processName,
+                    ProcessName = finalProcessName,
                     Titulo = titulo
                 });
 

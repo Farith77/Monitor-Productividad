@@ -76,19 +76,40 @@ namespace MonitorProductividad.Agent.Data
         /// </summary>
         private static string ObtenerMacAddress()
         {
-            foreach (NetworkInterface nic in NetworkInterface.GetAllNetworkInterfaces())
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces();
+
+            foreach (var ni in interfaces)
             {
-                if ((nic.NetworkInterfaceType == NetworkInterfaceType.Ethernet || 
-                     nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) && 
-                    nic.OperationalStatus == OperationalStatus.Up)
+                // 1. Ignorar interfaces apagadas o de loopback local
+                if (ni.OperationalStatus != OperationalStatus.Up || 
+                    ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
                 {
-                    string hex = nic.GetPhysicalAddress().ToString();
-                    if (string.IsNullOrEmpty(hex)) continue;
-                    
-                    return string.Join(":", Enumerable.Range(0, hex.Length / 2).Select(i => hex.Substring(i * 2, 2)));
+                    continue;
+                }
+
+                string descripcion = ni.Description.ToLower();
+                string nombre = ni.Name.ToLower();
+
+                // 2. Filtro estricto de hipervisores y adaptadores virtuales
+                if (descripcion.Contains("hyper-v") || 
+                    descripcion.Contains("virtual") || 
+                    descripcion.Contains("wsl") || 
+                    descripcion.Contains("vmware") ||
+                    descripcion.Contains("pseudo") ||
+                    nombre.Contains("veth"))
+                {
+                    continue;
+                }
+
+                // 3. Obtener los bytes y formatear con dos puntos (XX:XX:XX:XX:XX:XX)
+                var bytes = ni.GetPhysicalAddress().GetAddressBytes();
+                if (bytes.Length == 6)
+                {
+                    return string.Join(":", bytes.Select(b => b.ToString("X2")));
                 }
             }
-            return "00:00:00:00:00:00";
+
+            return "00:00:00:00:00:00"; // Fallback en caso extremo
         }
     }
 
