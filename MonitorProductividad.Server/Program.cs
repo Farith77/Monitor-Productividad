@@ -23,11 +23,13 @@ builder.Services.AddScoped<ITelemetryIngestionService, TelemetryIngestionService
 builder.Services.AddScoped<IMetricsAnalyticsService, MetricsAnalyticsService>();
 builder.Services.AddHostedService<DataRetentionBackgroundService>();
 
-// 3. Habilitar CORS para permitir llamadas desde el Frontend (React + Vite)
+// 3. Habilitar CORS (Permite localhost en desarrollo y el dominio de Vercel en producción)
+var allowedOrigin = builder.Configuration["AllowedFrontendOrigin"] ?? "http://localhost:5173";
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("FrontendPolicy", policy =>
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins("http://localhost:5173", allowedOrigin)
               .AllowAnyHeader()
               .AllowAnyMethod());
 });
