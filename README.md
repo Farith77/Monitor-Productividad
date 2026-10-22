@@ -76,7 +76,7 @@ flowchart TB
     Agent -->|Guarda localmente| DB
     SCM --> Watcher --> Watchdog
     Watchdog -.->|Supervisa y reanima| Agent
-    Agent ====>|HttpClient (Async JSON)| Server
+    Agent ====>|"HttpClient (Async JSON)"| Server
     Server -->|Ingesta y Analytics| Postgres
     Dashboard ====>|Consume API REST| Server
 
