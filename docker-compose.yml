@@ -1,0 +1,16 @@
+services:
+  telemetry-db:
+    image: postgres:17-alpine
+    container_name: postgres_telemetria
+    restart: always
+    environment:
+      POSTGRES_DB: telemetria_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: adminpassword123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

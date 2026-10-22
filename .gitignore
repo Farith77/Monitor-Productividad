@@ -1,0 +1,21 @@
+# Compilación .NET (Binarios y temporales)
+bin/
+obj/
+*.user
+*.suo
+
+# Dependencias de Node / React
+node_modules/
+dist/
+.vite/
+
+# Bases de datos locales y temporales
+*.db
+*.db-shm
+*.db-wal
+telemetria_local.db
+
+# Configuración local sensible
+appsettings.Development.json
+.env
+.env.local
