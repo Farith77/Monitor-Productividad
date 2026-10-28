@@ -64,13 +64,28 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
-      // BLINDAJE: Si una petición falla, retorna null/[] y no destruye a las demás
+      // Diagnóstico profundo: Capturamos y leemos el error exacto de cada petición
       const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
-        dashboardService.getResumen(mac, today).catch(() => null),
-        dashboardService.getRegistros(mac, today).catch(() => []),
-        dashboardService.getLineaTiempo(mac, today).catch(() => []),
-        dashboardService.getDistribucion(mac, today).catch(() => []),
-        dashboardService.getBackgroundStats(mac, today).catch(() => null)
+        dashboardService.getResumen(mac, today).catch(e => { 
+            console.error("Fallo Resumen:", e.response?.status, e.response?.data || e.message); 
+            return null; 
+        }),
+        dashboardService.getRegistros(mac, today).catch(e => { 
+            console.error("Fallo Registros:", e.response?.status, e.response?.data || e.message); 
+            return []; 
+        }),
+        dashboardService.getLineaTiempo(mac, today).catch(e => { 
+            console.error("Fallo Linea de tiempo:", e.response?.status, e.response?.data || e.message); 
+            return []; 
+        }),
+        dashboardService.getDistribucion(mac, today).catch(e => { 
+            console.error("Fallo Distribucion:", e.response?.status, e.response?.data || e.message); 
+            return []; 
+        }),
+        dashboardService.getBackgroundStats(mac, today).catch(e => { 
+            console.error("Fallo Background Stats:", e.response?.status, e.response?.data || e.message); 
+            return null; 
+        })
       ]);
       
       setResumen(resumenData);
