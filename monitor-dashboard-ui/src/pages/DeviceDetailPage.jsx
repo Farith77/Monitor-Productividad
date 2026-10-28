@@ -22,21 +22,27 @@ const APP_COLORS = {
 
 const getProcessColor = (processName) => {
   if (!processName) return '#a6a6a6';
-  if (APP_COLORS[processName]) return APP_COLORS[processName];
+  if (processName === 'Otros') return '#a6a6a6';
+  
+  // Extraer el nombre base si viene con formato "Titulo (proceso.exe)"
+  const match = processName.match(/\(([^)]+)\)$/);
+  const baseName = match ? match[1] : processName;
+
+  if (APP_COLORS[baseName]) return APP_COLORS[baseName];
   let hash = 0;
-  for (let i = 0; i < processName.length; i++) hash = processName.charCodeAt(i) + ((hash << 5) - hash);
+  for (let i = 0; i < baseName.length; i++) hash = baseName.charCodeAt(i) + ((hash << 5) - hash);
   const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
   return '#' + '00000'.substring(0, 6 - c.length) + c;
 };
 
-// HELPER: Filtra los ejecutables principales al Top 7 y agrupa el resto en "Otros"
+// HELPER: Filtra al Top 7 y agrupa el resto en "Otros"
 const procesarDistribucion = (dist) => {
   if (!dist || dist.length === 0) return [];
   if (dist.length <= 8) return dist;
   
   const top7 = dist.slice(0, 7);
   const otros = dist.slice(7).reduce((acc, curr) => {
-    acc.percentage += curr.percentage;
+    acc.percentage += curr.percentage || 0;
     return acc;
   }, { processName: 'Otros', name: 'Otros', percentage: 0 });
   
@@ -58,16 +64,22 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
+      // BLINDAJE: Si una petición falla, retorna null/[] y no destruye a las demás
       const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
-        dashboardService.getResumen(mac, today),
-        dashboardService.getRegistros(mac, today),
-        dashboardService.getLineaTiempo(mac, today),
-        dashboardService.getDistribucion(mac, today),
-        dashboardService.getBackgroundStats(mac, today) // Trae todo el historial de fondo procesado
+        dashboardService.getResumen(mac, today).catch(() => null),
+        dashboardService.getRegistros(mac, today).catch(() => []),
+        dashboardService.getLineaTiempo(mac, today).catch(() => []),
+        dashboardService.getDistribucion(mac, today).catch(() => []),
+        dashboardService.getBackgroundStats(mac, today).catch(() => null)
       ]);
+      
       setResumen(resumenData);
       setRegistros(registrosData);
       setDistribucion(procesarDistribucion(distribucionData)); 
+      
+      if (bgStatsData && bgStatsData.chart) {
+        bgStatsData.chart = procesarDistribucion(bgStatsData.chart);
+      }
       setBgStats(bgStatsData);
       
       const formattedTimeline = lineaData.map(seg => ({
@@ -77,7 +89,7 @@ export default function DeviceDetailPage() {
       }));
       setLineaTiempo(formattedTimeline);
     } catch (error) {
-      console.error("Error al cargar datos del dispositivo", error);
+      console.error("Error crítico en la carga del dispositivo", error);
     } finally {
       if (showLoader) setIsLoading(false);
     }
@@ -136,7 +148,6 @@ export default function DeviceDetailPage() {
               <>
                 <ContextTimeline segments={lineaTiempo} />
                 <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono font-medium">
-                  {/* Las horas ahora reflejan todo el día */}
                   <span>{resumen?.firstRecordTime || "--:--"}</span>
                   <span>{resumen?.lastRecordTime || "--:--"}</span>
                 </div>
@@ -165,7 +176,6 @@ export default function DeviceDetailPage() {
           </Card>
         </div>
 
-        {/* NUEVA TARJETA: Histórico de aplicaciones de fondo con estado en vivo */}
         <Card title="Aplicaciones en segundo plano" icon={AppWindow}>
           <div className="mt-2">
             {!bgStats?.tags || bgStats.tags.length === 0 ? (
