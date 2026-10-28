@@ -71,8 +71,6 @@ public static class DashboardEndpoints
             return Results.Ok(await analyticsService.ObtenerRegistrosRecientesAsync(macAddress, fecha, 50));
         });
 
-        return group;
-
         //  7. endpoints para backgroud del dia
         group.MapGet("/background-stats", async (
             [FromQuery] string macAddress, 
@@ -82,5 +80,7 @@ public static class DashboardEndpoints
             if (string.IsNullOrWhiteSpace(macAddress)) return Results.BadRequest("La MAC Address es obligatoria.");
             return Results.Ok(await analyticsService.ObtenerBackgroundStatsAsync(macAddress, fecha));
         });
+
+        return group;
     }
 }
