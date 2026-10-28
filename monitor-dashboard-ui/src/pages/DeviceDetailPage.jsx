@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Activity, Layers, List, PieChart } from 'lucide-react';
+import { ArrowLeft, Activity, List, PieChart, AppWindow } from 'lucide-react';
 import Card from '../components/dashboard/Card';
 import ContextTimeline from '../components/dashboard/ContextTimeline';
 import AppUsageChart from '../components/dashboard/AppUsageChart';
@@ -9,10 +9,8 @@ import { dashboardService } from '../services/dashboardService';
 const formatMinutes = (totalMinutes) => {
   if (!totalMinutes || totalMinutes === 0) return "0m";
   if (totalMinutes > 0 && totalMinutes < 1) return "< 1m";
-  
   const hours = Math.floor(totalMinutes / 60);
   const minutes = Math.round(totalMinutes % 60);
-  
   if (minutes === 60) return `${hours + 1}h 0m`;
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 };
@@ -31,12 +29,28 @@ const getProcessColor = (processName) => {
   return '#' + '00000'.substring(0, 6 - c.length) + c;
 };
 
+// HELPER: Filtra los ejecutables principales al Top 7 y agrupa el resto en "Otros"
+const procesarDistribucion = (dist) => {
+  if (!dist || dist.length === 0) return [];
+  if (dist.length <= 8) return dist;
+  
+  const top7 = dist.slice(0, 7);
+  const otros = dist.slice(7).reduce((acc, curr) => {
+    acc.percentage += curr.percentage;
+    return acc;
+  }, { processName: 'Otros', name: 'Otros', percentage: 0 });
+  
+  otros.percentage = Math.round(otros.percentage * 10) / 10;
+  return [...top7, otros];
+};
+
 export default function DeviceDetailPage() {
   const { mac } = useParams();
   const [resumen, setResumen] = useState(null);
   const [registros, setRegistros] = useState([]);
   const [lineaTiempo, setLineaTiempo] = useState([]);
   const [distribucion, setDistribucion] = useState([]);
+  const [bgStats, setBgStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const today = new Date().toISOString().split('T')[0];
@@ -44,15 +58,17 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
-      const [resumenData, registrosData, lineaData, distribucionData] = await Promise.all([
+      const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
         dashboardService.getResumen(mac, today),
         dashboardService.getRegistros(mac, today),
         dashboardService.getLineaTiempo(mac, today),
-        dashboardService.getDistribucion(mac, today)
+        dashboardService.getDistribucion(mac, today),
+        dashboardService.getBackgroundStats(mac, today) // Trae todo el historial de fondo procesado
       ]);
       setResumen(resumenData);
       setRegistros(registrosData);
-      setDistribucion(distribucionData);
+      setDistribucion(procesarDistribucion(distribucionData)); 
+      setBgStats(bgStatsData);
       
       const formattedTimeline = lineaData.map(seg => ({
         label: seg.label,
@@ -74,33 +90,6 @@ export default function DeviceDetailPage() {
       return () => clearInterval(intervalId);
     }
   }, [mac, fetchData]);
-
-  // =========================================================================
-  // NUEVO: Transformar el historial en datos porcentuales para la 2da Dona
-  // =========================================================================
-  const bgWindowCounts = {};
-  let totalBgWindowsCount = 0;
-
-  registros.forEach(r => {
-    // Solo medimos la concurrencia cuando el usuario realmente está trabajando
-    if (r.process !== 'idle.exe' && r.backgroundWindows) {
-      r.backgroundWindows.forEach(app => {
-        bgWindowCounts[app] = (bgWindowCounts[app] || 0) + 1;
-        totalBgWindowsCount++;
-      });
-    }
-  });
-
-  const backgroundChartData = Object.entries(bgWindowCounts)
-    .map(([name, count]) => ({
-      name: name,
-      percentage: totalBgWindowsCount > 0 ? Math.round((count / totalBgWindowsCount) * 100) : 0
-    }))
-    .sort((a, b) => b.percentage - a.percentage)
-    .slice(0, 5); // Tomamos el Top 5 para que la dona no se sature
-
-  const startTime = registros.length > 0 ? registros[registros.length - 1].time.substring(0, 5) : "--:--";
-  const endTime = registros.length > 0 ? registros[0].time.substring(0, 5) : "--:--";
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
@@ -147,8 +136,9 @@ export default function DeviceDetailPage() {
               <>
                 <ContextTimeline segments={lineaTiempo} />
                 <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono font-medium">
-                  <span>{startTime}</span>
-                  <span>{endTime}</span>
+                  {/* Las horas ahora reflejan todo el día */}
+                  <span>{resumen?.firstRecordTime || "--:--"}</span>
+                  <span>{resumen?.lastRecordTime || "--:--"}</span>
                 </div>
               </>
             ) : (
@@ -158,7 +148,6 @@ export default function DeviceDetailPage() {
         </Card>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Dona 1: Ejecutables en Primer Plano */}
           <Card title="Distribución por ejecutable" icon={PieChart}>
             {distribucion.length > 0 ? (
                <AppUsageChart data={distribucion} centerText={formatMinutes(resumen?.totalActiveMinutes)} />
@@ -167,15 +156,32 @@ export default function DeviceDetailPage() {
             )}
           </Card>
 
-          {/* Dona 2: Ventanas en Segundo Plano (AHORA COMO GRÁFICA) */}
-          <Card title="Proporción de ventanas en segundo plano" icon={Layers}>
-            {backgroundChartData.length > 0 ? (
-               <AppUsageChart data={backgroundChartData} centerText="Top 5 Apps" />
+          <Card title="Proporción de ventanas en segundo plano" icon={PieChart}>
+            {bgStats?.chart?.length > 0 ? (
+               <AppUsageChart data={bgStats.chart} centerText="Top 7 Ventanas" />
             ) : (
                <div className="h-48 flex items-center justify-center text-slate-400 text-sm">No hay procesos recientes</div>
             )}
           </Card>
         </div>
+
+        {/* NUEVA TARJETA: Histórico de aplicaciones de fondo con estado en vivo */}
+        <Card title="Aplicaciones en segundo plano" icon={AppWindow}>
+          <div className="mt-2">
+            {!bgStats?.tags || bgStats.tags.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay procesos en segundo plano registrados hoy.</p>
+            ) : (
+              <div className="flex flex-wrap gap-3 mt-3">
+                {bgStats.tags.map((app, index) => (
+                  <div key={index} className="flex items-center gap-2 px-3 py-1.5 bg-red-50/50 text-slate-800 text-sm font-medium rounded-md border border-red-100">
+                    <span>{app.name}</span>
+                    <span className={`w-2 h-2 rounded-full ${app.isOpen ? 'bg-emerald-500 shadow-sm shadow-emerald-400/50' : 'bg-slate-300'}`}></span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
 
         <Card title="Registro reciente" icon={List}>
           <div className="overflow-x-auto w-full mt-2">
