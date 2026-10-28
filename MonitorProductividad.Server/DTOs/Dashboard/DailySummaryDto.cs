@@ -12,6 +12,8 @@ public class DailySummaryDto
     // 1. Métricas restauradas para el Panel Individual (reemplazan a Productividad y Total Muestras)
     public double AverageCpu { get; set; }
     public double AverageRamGb { get; set; }
+    public string FirstRecordTime { get; set; } = "--:--";
+    public string LastRecordTime { get; set; } = "--:--";
     
     // 2. Métricas de Concurrencia y Foco (calculadas con TODO el día, no solo 50 registros)
     public int ContextSwitches { get; set; }

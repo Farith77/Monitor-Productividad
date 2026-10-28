@@ -82,6 +82,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         double longestFocusMinutes = (maxStreak * SegundosPorMuestra) / 60.0;
 
+        string firstTime = registros.Any() ? registros.First().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
+        string lastTime = registros.Any() ? registros.Last().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
+
         return new DailySummaryDto
         {
             MacAddress = macAddress,
@@ -92,7 +95,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             AverageRamGb = Math.Round(avgRamGb, 1),
             ContextSwitches = contextSwitches,
             AverageBackgroundWindows = Math.Round(avgBgWindows, 1),
-            LongestFocusBlockMinutes = Math.Round(longestFocusMinutes, 1)
+            LongestFocusBlockMinutes = Math.Round(longestFocusMinutes, 1),
+            FirstRecordTime = firstTime,
+            LastRecordTime = lastTime
         };
     }
 
@@ -265,5 +270,57 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
                 ? r.BackgroundWindows.Select(bw => bw.ProcessName).Distinct().ToList() 
                 : new List<string>()
         }).ToList();
+    }
+
+    public async Task<object> ObtenerBackgroundStatsAsync(string macAddress, DateTime fecha)
+    {
+        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+
+        var registros = await _context.TelemetryRecords
+            .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia && t.ProcessName != "idle.exe")
+            .OrderBy(t => t.DeviceTimestamp)
+            .ToListAsync();
+
+        var distribucion = new Dictionary<string, int>();
+        var appsAbiertasHistorico = new HashSet<string>();
+
+        foreach (var r in registros)
+        {
+            if (r.BackgroundWindows != null)
+            {
+                foreach (var bw in r.BackgroundWindows)
+                {
+                    // 1. Para la Dona: Formato "Título (proceso.exe)"
+                    string tituloLimpio = string.IsNullOrWhiteSpace(bw.Titulo) ? "Sin Título" : bw.Titulo;
+                    string nombreCompleto = $"{tituloLimpio} ({bw.ProcessName})";
+                    
+                    if (distribucion.ContainsKey(nombreCompleto)) distribucion[nombreCompleto]++;
+                    else distribucion[nombreCompleto] = 1;
+
+                    // 2. Para los Tags: Guardamos qué ejecutables se abrieron hoy
+                    appsAbiertasHistorico.Add(bw.ProcessName);
+                }
+            }
+        }
+
+        // Verificamos cuáles de todas esas apps siguen abiertas en el último registro (para el punto verde/gris)
+        var ultimoRegistro = registros.LastOrDefault();
+        var appsActuales = ultimoRegistro?.BackgroundWindows?.Select(b => b.ProcessName).ToHashSet() ?? new HashSet<string>();
+
+        var tags = appsAbiertasHistorico.Select(app => new {
+            Name = app,
+            IsOpen = appsActuales.Contains(app)
+        }).ToList();
+
+        var totalSamples = registros.Count > 0 ? registros.Count : 1;
+
+        // Top 7 estricto para la gráfica de dona
+        var chartData = distribucion.Select(kv => new {
+            Name = kv.Key,
+            Percentage = Math.Round(((double)kv.Value / totalSamples) * 100, 1)
+        }).OrderByDescending(x => x.Percentage).Take(7).ToList();
+
+        return new { Tags = tags, Chart = chartData };
     }
 }

@@ -19,4 +19,6 @@ public interface IMetricsAnalyticsService
     
     // Tabla de registro reciente (Limitado a 50 para velocidad)
     Task<List<TelemetryLogDto>> ObtenerRegistrosRecientesAsync(string macAddress, DateTime fecha, int limite = 50);
+
+    Task<object> ObtenerBackgroundStatsAsync(string macAddress, DateTime fecha);
 }
