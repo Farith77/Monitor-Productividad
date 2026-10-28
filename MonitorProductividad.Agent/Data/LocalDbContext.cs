@@ -1,13 +1,29 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Data.Sqlite;
 
 namespace MonitorProductividad.Agent.Data
 {
     public class LocalDbContext
     {
-        private const string DbName = "telemetria_local.db";
-        private static readonly string ConnectionString = $"Data Source={DbName}";
+        private static readonly string ConnectionString;
+
+        // NUEVO: Constructor estático que redirige la base de datos a una ruta permitida por Windows
+        static LocalDbContext()
+        {
+            // Apunta a C:\Users\<TuUsuario>\AppData\Local\MonitorTesis
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string folderPath = Path.Combine(appData, "MonitorProductividad");
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+            }
+
+            string dbPath = Path.Combine(folderPath, "telemetria_local.db");
+            ConnectionString = $"Data Source={dbPath}";
+        }
 
         /// <summary>
         /// Inicializa la base de datos creando la tabla y aplicando migraciones de columnas faltantes.
@@ -150,12 +166,10 @@ namespace MonitorProductividad.Agent.Data
                     transaction.Commit();
                 }
                 
-                // 2. NUEVO: Política de Retención (Purga de datos antiguos)
+                // 2. Política de Retención (Purga de datos antiguos)
                 try
                 {
                     var purgeCommand = connection.CreateCommand();
-                    // Elimina físicamente los registros que ya están en el servidor central
-                    // y que tienen más de 3 días de antigüedad en la máquina local.
                     purgeCommand.CommandText = "DELETE FROM Local_Telemetry_Log WHERE IsSynced = 1 AND datetime(Timestamp) <= datetime('now', '-3 days');";
                     int eliminados = purgeCommand.ExecuteNonQuery();
 

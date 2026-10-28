@@ -10,7 +10,7 @@ builder.Services.AddHostedService<WatchdogWorker>();
 // 2. Activamos el soporte nativo para el Service Control Manager (SCM) de Windows
 builder.Services.AddWindowsService(options =>
 {
-    options.ServiceName = "MonitorWatchdog";
+    options.ServiceName = "WatcherMP";
 });
 
 var host = builder.Build();

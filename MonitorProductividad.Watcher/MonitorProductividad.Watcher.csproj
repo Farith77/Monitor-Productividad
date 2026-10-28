@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-MonitorProductividad.Watcher-466aa0c8-e470-48d1-9401-fbb547175cd9</UserSecretsId>
+    <AssemblyName>WatcherMP</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
