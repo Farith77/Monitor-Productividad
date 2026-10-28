@@ -72,5 +72,15 @@ public static class DashboardEndpoints
         });
 
         return group;
+
+        //  7. endpoints para backgroud del dia
+        group.MapGet("/background-stats", async (
+            [FromQuery] string macAddress, 
+            [FromQuery] DateTime fecha, 
+            IMetricsAnalyticsService analyticsService) =>
+        {
+            if (string.IsNullOrWhiteSpace(macAddress)) return Results.BadRequest("La MAC Address es obligatoria.");
+            return Results.Ok(await analyticsService.ObtenerBackgroundStatsAsync(macAddress, fecha));
+        });
     }
 }

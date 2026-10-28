@@ -28,5 +28,9 @@ export const dashboardService = {
   getDispositivos: async () => {
     const response = await api.get(`/dispositivos`);
     return response.data;
-  }
+  },
+  getBackgroundStats: async (macAddress, fecha) => {
+    const response = await api.get(`/dashboard/background-stats`, { params: { macAddress, fecha } });
+    return response.data;
+  },
 };
