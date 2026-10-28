@@ -284,6 +284,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         var distribucion = new Dictionary<string, int>();
         var appsAbiertasHistorico = new HashSet<string>();
+        int totalVentanas = 0; // NUEVO: Para calcular el porcentaje sobre el total real
 
         foreach (var r in registros)
         {
@@ -291,35 +292,33 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             {
                 foreach (var bw in r.BackgroundWindows)
                 {
-                    // 1. Para la Dona: Formato "Título (proceso.exe)"
+                    // Formato: "Título de la ventana (proceso.exe)"
                     string tituloLimpio = string.IsNullOrWhiteSpace(bw.Titulo) ? "Sin Título" : bw.Titulo;
                     string nombreCompleto = $"{tituloLimpio} ({bw.ProcessName})";
                     
                     if (distribucion.ContainsKey(nombreCompleto)) distribucion[nombreCompleto]++;
                     else distribucion[nombreCompleto] = 1;
 
-                    // 2. Para los Tags: Guardamos qué ejecutables se abrieron hoy
                     appsAbiertasHistorico.Add(bw.ProcessName);
+                    totalVentanas++;
                 }
             }
         }
 
-        // Verificamos cuáles de todas esas apps siguen abiertas en el último registro (para el punto verde/gris)
         var ultimoRegistro = registros.LastOrDefault();
         var appsActuales = ultimoRegistro?.BackgroundWindows?.Select(b => b.ProcessName).ToHashSet() ?? new HashSet<string>();
 
+        // Ordenamos para que las que están abiertas (verde) salgan primero
         var tags = appsAbiertasHistorico.Select(app => new {
             Name = app,
             IsOpen = appsActuales.Contains(app)
-        }).ToList();
+        }).OrderByDescending(t => t.IsOpen).ToList();
 
-        var totalSamples = registros.Count > 0 ? registros.Count : 1;
-
-        // Top 7 estricto para la gráfica de dona
+        // Envíamos TODO (sin Take) para que React agrupe el excedente en "Otros"
         var chartData = distribucion.Select(kv => new {
             Name = kv.Key,
-            Percentage = Math.Round(((double)kv.Value / totalSamples) * 100, 1)
-        }).OrderByDescending(x => x.Percentage).Take(7).ToList();
+            Percentage = totalVentanas > 0 ? Math.Round(((double)kv.Value / totalVentanas) * 100, 1) : 0
+        }).OrderByDescending(x => x.Percentage).ToList();
 
         return new { Tags = tags, Chart = chartData };
     }
