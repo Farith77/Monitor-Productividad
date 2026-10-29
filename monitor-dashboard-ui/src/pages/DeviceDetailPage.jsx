@@ -64,28 +64,13 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
-      // Diagnóstico profundo: Capturamos y leemos el error exacto de cada petición
+      // BLINDAJE: Si una petición falla, retorna null/[] y no destruye a las demás
       const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
-        dashboardService.getResumen(mac, today).catch(e => { 
-            console.error("Fallo Resumen:", e.response?.status, e.response?.data || e.message); 
-            return null; 
-        }),
-        dashboardService.getRegistros(mac, today).catch(e => { 
-            console.error("Fallo Registros:", e.response?.status, e.response?.data || e.message); 
-            return []; 
-        }),
-        dashboardService.getLineaTiempo(mac, today).catch(e => { 
-            console.error("Fallo Linea de tiempo:", e.response?.status, e.response?.data || e.message); 
-            return []; 
-        }),
-        dashboardService.getDistribucion(mac, today).catch(e => { 
-            console.error("Fallo Distribucion:", e.response?.status, e.response?.data || e.message); 
-            return []; 
-        }),
-        dashboardService.getBackgroundStats(mac, today).catch(e => { 
-            console.error("Fallo Background Stats:", e.response?.status, e.response?.data || e.message); 
-            return null; 
-        })
+        dashboardService.getResumen(mac, today).catch(() => null),
+        dashboardService.getRegistros(mac, today).catch(() => []),
+        dashboardService.getLineaTiempo(mac, today).catch(() => []),
+        dashboardService.getDistribucion(mac, today).catch(() => []),
+        dashboardService.getBackgroundStats(mac, today).catch(() => null)
       ]);
       
       setResumen(resumenData);
@@ -210,26 +195,30 @@ export default function DeviceDetailPage() {
 
         <Card title="Registro reciente" icon={List}>
           <div className="overflow-x-auto w-full mt-2">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left whitespace-nowrap">
               <thead className="text-slate-500 border-b border-slate-200">
                 <tr>
-                  <th className="pb-3 font-medium">Hora</th>
-                  <th className="pb-3 font-medium">Proceso</th>
-                  <th className="pb-3 font-medium">Título de ventana</th>
-                  <th className="pb-3 font-medium">CPU</th>
-                  <th className="pb-3 font-medium">RAM</th>
-                  <th className="pb-3 font-medium">Idle</th>
+                  <th className="pb-3 pr-4 font-medium">Hora</th>
+                  <th className="pb-3 px-4 font-medium">Proceso</th>
+                  {/* Le damos más ancho disponible al título */}
+                  <th className="pb-3 px-4 font-medium w-full">Título de ventana</th>
+                  <th className="pb-3 px-4 font-medium">CPU</th>
+                  <th className="pb-3 px-4 font-medium">RAM</th>
+                  <th className="pb-3 pl-4 font-medium">Idle</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {registros.map((log, i) => (
-                  <tr key={i} className="text-slate-800">
-                    <td className="py-3 font-mono text-xs text-slate-400 font-medium">{log.time}</td>
-                    <td className="py-3 font-semibold text-slate-800">{log.process}</td>
-                    <td className="py-3 text-slate-600 font-medium">{log.window}</td>
-                    <td className="py-3 font-medium">{log.cpu}</td>
-                    <td className="py-3 font-medium">{log.ram}</td>
-                    <td className="py-3 font-medium">{log.idle}</td>
+                  <tr key={i} className="text-slate-800 hover:bg-slate-50/50 transition-colors">
+                    <td className="py-3 pr-4 font-mono text-xs text-slate-400 font-medium">{log.time}</td>
+                    <td className="py-3 px-4 font-semibold text-slate-800">{log.process}</td>
+                    {/* El truncamiento (truncate max-w-md) evita que un título gigante deforme la tabla */}
+                    <td className="py-3 px-4 text-slate-600 font-medium truncate max-w-xs md:max-w-md" title={log.window}>
+                      {log.window}
+                    </td>
+                    <td className="py-3 px-4 font-medium">{log.cpu}</td>
+                    <td className="py-3 px-4 font-medium">{log.ram}</td>
+                    <td className="py-3 pl-4 font-medium">{log.idle}</td>
                   </tr>
                 ))}
               </tbody>
