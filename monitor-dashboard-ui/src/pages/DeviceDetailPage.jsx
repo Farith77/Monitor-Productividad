@@ -59,7 +59,8 @@ export default function DeviceDetailPage() {
   const [bgStats, setBgStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const today = new Date().toISOString().split('T')[0];
+  // Fecha calendario en hora de Perú (toISOString usa UTC y cambia de día a las 19:00)
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
