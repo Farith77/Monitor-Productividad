@@ -20,7 +20,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
     public async Task<DailySummaryDto> ObtenerResumenDiarioAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        // Definimos el rango del día basándonos en la zona horaria UTC-5 (Perú/Colombia/EST)
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         // Ordenamos cronológicamente para medir cambios de contexto y bloques de foco reales
@@ -40,7 +41,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         double totalActiveMinutes = (registrosActivosList.Count * SegundosPorMuestra) / 60.0;
         double totalIdleMinutes = (countInactivos * SegundosPorMuestra) / 60.0;
 
-        // 1. CPU y RAM Promedio (calculados sobre el tiempo activo para no sesgar con ceros de idle)
+        // 1. CPU y RAM Promedio
         double avgCpu = registrosActivosList.Any() ? registrosActivosList.Average(r => r.CpuPercentage) : 0.0;
         double avgRamGb = registrosActivosList.Any() ? registrosActivosList.Average(r => r.RamUsageMb) / 1024.0 : 0.0;
 
@@ -49,7 +50,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             ? registrosActivosList.Average(r => r.BackgroundWindows != null ? r.BackgroundWindows.Count : 0) 
             : 0.0;
 
-        // 3. Cálculo del Bloque de Foco más largo y Cambios de Contexto de TODO el día
+        // 3. Cálculo del Bloque de Foco más largo y Cambios de Contexto
         int contextSwitches = 0;
         string? lastProcess = null;
         int currentStreak = 0;
@@ -59,7 +60,6 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         {
             if (r.ProcessName == "idle.exe")
             {
-                // Si entra en inactividad, se rompe la racha de foco continuo
                 if (currentStreak > maxStreak) maxStreak = currentStreak;
                 currentStreak = 0;
             }
@@ -82,8 +82,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         double longestFocusMinutes = (maxStreak * SegundosPorMuestra) / 60.0;
 
-        string firstTime = registros.Any() ? registros.First().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
-        string lastTime = registros.Any() ? registros.Last().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
+        // Enviamos formato ISO UTC para que React lo convierta
+        string firstTime = registros.Any() ? registros.First().DeviceTimestamp.ToString("yyyy-MM-ddTHH:mm:ssZ") : "";
+        string lastTime = registros.Any() ? registros.Last().DeviceTimestamp.ToString("yyyy-MM-ddTHH:mm:ssZ") : "";
 
         return new DailySummaryDto
         {
@@ -101,10 +102,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         };
     }
 
-    // DONA 1: Distribución por Ejecutable (Todo el día)
     public async Task<List<AppUsageDistributionDto>> ObtenerDistribucionUsoAppsAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registrosProductivos = await _context.TelemetryRecords
@@ -127,10 +127,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             .ToList();
     }
 
-    // DONA 2: Distribución por Título de Ventana (Todo el día)
     public async Task<List<AppUsageDistributionDto>> ObtenerDistribucionVentanasAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registrosProductivos = await _context.TelemetryRecords
@@ -145,19 +144,18 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             .GroupBy(r => string.IsNullOrWhiteSpace(r.WindowTitle) ? r.ProcessName : r.WindowTitle)
             .Select(g => new AppUsageDistributionDto
             {
-                ProcessName = g.Key, // Usamos la misma propiedad para el título de ventana
+                ProcessName = g.Key, 
                 TimeSpentMinutes = Math.Round((g.Count() * SegundosPorMuestra) / 60.0, 2),
                 Percentage = Math.Round(((double)g.Count() / totalRegistros) * 100, 1)
             })
             .OrderByDescending(x => x.Percentage)
-            .Take(10) // Top 10 ventanas del día
+            .Take(10)
             .ToList();
     }
 
-    // LÍNEA DE TIEMPO DEL PANEL INDIVIDUAL (Todo el día comprimido en bloques)
     public async Task<List<TimelineSegmentDto>> ObtenerLineaTiempoDiaAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registros = await _context.TelemetryRecords
@@ -206,10 +204,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         return segments;
     }
 
-    // CURVA DE CAMBIOS DE CONTEXTO POR HORA (Todo el día)
     public async Task<List<HourlySwitchDto>> ObtenerTendenciaCambiosAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registros = await _context.TelemetryRecords
@@ -219,6 +216,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             .ToListAsync();
 
         var hourlyDict = new Dictionary<string, int>();
+        // Generamos un fallback inicial en el diccionario en UTC-5 para asegurar que la gráfica no esté vacía
         for (int h = 8; h <= 18; h++)
         {
             hourlyDict[$"{h:D2}:00"] = 0;
@@ -229,8 +227,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         {
             if (lastProc != null && r.ProcessName != lastProc)
             {
-                // Forzamos la zona horaria a UTC-5 (Perú/Colombia) sin importar dónde esté el servidor
-                string hourKey = r.DeviceTimestamp.AddHours(-5).ToString("HH:00");
+                // Enviamos el timestamp completo en UTC para que React lo agrupe localmente
+                string hourKey = r.DeviceTimestamp.ToString("yyyy-MM-ddTHH:00:00Z");
                 if (hourlyDict.ContainsKey(hourKey))
                     hourlyDict[hourKey]++;
                 else
@@ -245,10 +243,9 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             .ToList();
     }
 
-    // TABLA DE REGISTRO RECIENTE (Estricto en 50 para no saturar el frontend)
     public async Task<List<TelemetryLogDto>> ObtenerRegistrosRecientesAsync(string macAddress, DateTime fecha, int limite = 50)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registros = await _context.TelemetryRecords
@@ -259,8 +256,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         return registros.Select(r => new TelemetryLogDto
         {
-            // Forzamos a UTC-5
-            Time = r.DeviceTimestamp.AddHours(-5).ToString("HH:mm:ss"),
+            // Enviamos en formato ISO UTC para la tabla
+            Time = r.DeviceTimestamp.ToString("yyyy-MM-ddTHH:mm:ssZ"),
             Process = r.ProcessName,
             Window = string.IsNullOrWhiteSpace(r.WindowTitle) ? "—" : r.WindowTitle,
             Cpu = $"{Math.Round(r.CpuPercentage, 1)}%",
@@ -274,7 +271,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
     public async Task<object> ObtenerBackgroundStatsAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
+        var inicioDia = new DateTimeOffset(fecha.Date, TimeSpan.FromHours(-5)).UtcDateTime;
         var finDia = inicioDia.AddDays(1).AddTicks(-1);
 
         var registros = await _context.TelemetryRecords
@@ -284,7 +281,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         var distribucion = new Dictionary<string, int>();
         var appsAbiertasHistorico = new HashSet<string>();
-        int totalVentanas = 0; // NUEVO: Para calcular el porcentaje sobre el total real
+        int totalVentanas = 0;
 
         foreach (var r in registros)
         {
@@ -292,7 +289,6 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             {
                 foreach (var bw in r.BackgroundWindows)
                 {
-                    // Formato: "Título de la ventana (proceso.exe)"
                     string tituloLimpio = string.IsNullOrWhiteSpace(bw.Titulo) ? "Sin Título" : bw.Titulo;
                     string nombreCompleto = $"{tituloLimpio} ({bw.ProcessName})";
                     
@@ -308,13 +304,11 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         var ultimoRegistro = registros.LastOrDefault();
         var appsActuales = ultimoRegistro?.BackgroundWindows?.Select(b => b.ProcessName).ToHashSet() ?? new HashSet<string>();
 
-        // Ordenamos para que las que están abiertas (verde) salgan primero
         var tags = appsAbiertasHistorico.Select(app => new {
             Name = app,
             IsOpen = appsActuales.Contains(app)
         }).OrderByDescending(t => t.IsOpen).ToList();
 
-        // Envíamos TODO (sin Take) para que React agrupe el excedente en "Otros"
         var chartData = distribucion.Select(kv => new {
             Name = kv.Key,
             Percentage = totalVentanas > 0 ? Math.Round(((double)kv.Value / totalVentanas) * 100, 1) : 0

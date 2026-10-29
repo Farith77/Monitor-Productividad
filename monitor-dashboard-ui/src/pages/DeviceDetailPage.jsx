@@ -15,6 +15,18 @@ const formatMinutes = (totalMinutes) => {
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 };
 
+// HELPER: Convierte una fecha UTC estricta a formato de hora local (Ej: "14:30")
+const formatLocalTime = (utcString) => {
+  if (!utcString || utcString === "--:--" || utcString === "") return "--:--";
+  try {
+    const date = new Date(utcString);
+    // Extrae solo la hora y minuto en formato local
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch (e) {
+    return "--:--";
+  }
+};
+
 const APP_COLORS = {
   'Code.exe': '#517de3', 'brave.exe': '#73a580', 'chrome.exe': '#73a580',
   'idle.exe': '#e2e8f0', 'explorer.exe': '#a57a4a', 'SystemSettings.exe': '#64748b'
@@ -24,7 +36,6 @@ const getProcessColor = (processName) => {
   if (!processName) return '#a6a6a6';
   if (processName === 'Otros') return '#a6a6a6';
   
-  // Extraer el nombre base si viene con formato "Titulo (proceso.exe)"
   const match = processName.match(/\(([^)]+)\)$/);
   const baseName = match ? match[1] : processName;
 
@@ -64,7 +75,6 @@ export default function DeviceDetailPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
-      // BLINDAJE: Si una petición falla, retorna null/[] y no destruye a las demás
       const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
         dashboardService.getResumen(mac, today).catch(() => null),
         dashboardService.getRegistros(mac, today).catch(() => []),
@@ -148,8 +158,9 @@ export default function DeviceDetailPage() {
               <>
                 <ContextTimeline segments={lineaTiempo} />
                 <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono font-medium">
-                  <span>{resumen?.firstRecordTime || "--:--"}</span>
-                  <span>{resumen?.lastRecordTime || "--:--"}</span>
+                  {/* Se aplica la conversión local a las horas de inicio y fin */}
+                  <span>{formatLocalTime(resumen?.firstRecordTime)}</span>
+                  <span>{formatLocalTime(resumen?.lastRecordTime)}</span>
                 </div>
               </>
             ) : (
@@ -200,7 +211,6 @@ export default function DeviceDetailPage() {
                 <tr>
                   <th className="pb-3 pr-4 font-medium">Hora</th>
                   <th className="pb-3 px-4 font-medium">Proceso</th>
-                  {/* Le damos más ancho disponible al título */}
                   <th className="pb-3 px-4 font-medium w-full">Título de ventana</th>
                   <th className="pb-3 px-4 font-medium">CPU</th>
                   <th className="pb-3 px-4 font-medium">RAM</th>
@@ -210,9 +220,9 @@ export default function DeviceDetailPage() {
               <tbody className="divide-y divide-slate-100">
                 {registros.map((log, i) => (
                   <tr key={i} className="text-slate-800 hover:bg-slate-50/50 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-xs text-slate-400 font-medium">{log.time}</td>
+                    {/* Se aplica la conversión local a la tabla */}
+                    <td className="py-3 pr-4 font-mono text-xs text-slate-400 font-medium">{formatLocalTime(log.time)}</td>
                     <td className="py-3 px-4 font-semibold text-slate-800">{log.process}</td>
-                    {/* El truncamiento (truncate max-w-md) evita que un título gigante deforme la tabla */}
                     <td className="py-3 px-4 text-slate-600 font-medium truncate max-w-xs md:max-w-md" title={log.window}>
                       {log.window}
                     </td>
