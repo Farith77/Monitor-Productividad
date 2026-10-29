@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,15 +13,30 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     private readonly TelemetryDbContext _context;
     private const double SegundosPorMuestra = 5.0; 
 
+    // Perú es UTC-5 todo el año (sin horario de verano)
+    private static readonly TimeSpan OffsetPeru = TimeSpan.FromHours(-5);
+
     public MetricsAnalyticsService(TelemetryDbContext context)
     {
         _context = context;
     }
 
+    /// <summary>
+    /// Devuelve el rango [inicio, fin] en UTC correspondiente al día calendario peruano de 'fecha'.
+    /// Ej: 2026-10-29 (Perú) => 2026-10-29 05:00 UTC .. 2026-10-30 04:59:59.9999999 UTC
+    /// </summary>
+    private static (DateTime inicioUtc, DateTime finUtc) RangoDiaPeru(DateTime fecha)
+    {
+        var inicioUtc = DateTime.SpecifyKind(fecha.Date - OffsetPeru, DateTimeKind.Utc);
+        var finUtc = inicioUtc.AddDays(1).AddTicks(-1);
+        return (inicioUtc, finUtc);
+    }
+
+    private static DateTime AHoraPeru(DateTime utc) => utc.Add(OffsetPeru);
+
     public async Task<DailySummaryDto> ObtenerResumenDiarioAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         // Ordenamos cronológicamente para medir cambios de contexto y bloques de foco reales
         var registros = await _context.TelemetryRecords
@@ -82,8 +97,8 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
         double longestFocusMinutes = (maxStreak * SegundosPorMuestra) / 60.0;
 
-        string firstTime = registros.Any() ? registros.First().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
-        string lastTime = registros.Any() ? registros.Last().DeviceTimestamp.AddHours(-5).ToString("HH:mm") : "--:--";
+        string firstTime = registros.Any() ? AHoraPeru(registros.First().DeviceTimestamp).ToString("HH:mm") : "--:--";
+        string lastTime = registros.Any() ? AHoraPeru(registros.Last().DeviceTimestamp).ToString("HH:mm") : "--:--";
 
         return new DailySummaryDto
         {
@@ -104,8 +119,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     // DONA 1: Distribución por Ejecutable (Todo el día)
     public async Task<List<AppUsageDistributionDto>> ObtenerDistribucionUsoAppsAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registrosProductivos = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia && t.ProcessName != "idle.exe")
@@ -130,8 +144,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     // DONA 2: Distribución por Título de Ventana (Todo el día)
     public async Task<List<AppUsageDistributionDto>> ObtenerDistribucionVentanasAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registrosProductivos = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia && t.ProcessName != "idle.exe")
@@ -157,8 +170,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     // LÍNEA DE TIEMPO DEL PANEL INDIVIDUAL (Todo el día comprimido en bloques)
     public async Task<List<TimelineSegmentDto>> ObtenerLineaTiempoDiaAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registros = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia)
@@ -209,8 +221,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     // CURVA DE CAMBIOS DE CONTEXTO POR HORA (Todo el día)
     public async Task<List<HourlySwitchDto>> ObtenerTendenciaCambiosAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registros = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia && t.ProcessName != "idle.exe")
@@ -230,7 +241,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
             if (lastProc != null && r.ProcessName != lastProc)
             {
                 // Forzamos la zona horaria a UTC-5 (Perú/Colombia) sin importar dónde esté el servidor
-                string hourKey = r.DeviceTimestamp.AddHours(-5).ToString("HH:00");
+                string hourKey = AHoraPeru(r.DeviceTimestamp).ToString("HH:00");
                 if (hourlyDict.ContainsKey(hourKey))
                     hourlyDict[hourKey]++;
                 else
@@ -248,8 +259,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
     // TABLA DE REGISTRO RECIENTE (Estricto en 50 para no saturar el frontend)
     public async Task<List<TelemetryLogDto>> ObtenerRegistrosRecientesAsync(string macAddress, DateTime fecha, int limite = 50)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registros = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia)
@@ -260,7 +270,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         return registros.Select(r => new TelemetryLogDto
         {
             // Forzamos a UTC-5
-            Time = r.DeviceTimestamp.AddHours(-5).ToString("HH:mm:ss"),
+            Time = AHoraPeru(r.DeviceTimestamp).ToString("HH:mm:ss"),
             Process = r.ProcessName,
             Window = string.IsNullOrWhiteSpace(r.WindowTitle) ? "—" : r.WindowTitle,
             Cpu = $"{Math.Round(r.CpuPercentage, 1)}%",
@@ -274,8 +284,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
 
     public async Task<object> ObtenerBackgroundStatsAsync(string macAddress, DateTime fecha)
     {
-        var inicioDia = DateTime.SpecifyKind(fecha.Date, DateTimeKind.Utc);
-        var finDia = inicioDia.AddDays(1).AddTicks(-1);
+        var (inicioDia, finDia) = RangoDiaPeru(fecha);
 
         var registros = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia && t.ProcessName != "idle.exe")
