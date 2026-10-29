@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -175,7 +175,7 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         var registros = await _context.TelemetryRecords
             .Where(t => t.WorkstationId == macAddress && t.DeviceTimestamp >= inicioDia && t.DeviceTimestamp <= finDia)
             .OrderBy(t => t.DeviceTimestamp)
-            .Select(t => t.ProcessName)
+            .Select(t => new { t.ProcessName, t.DeviceTimestamp })
             .ToListAsync();
 
         if (!registros.Any()) return new List<TimelineSegmentDto>();
@@ -183,35 +183,35 @@ public class MetricsAnalyticsService : IMetricsAnalyticsService
         int total = registros.Count;
         var segments = new List<TimelineSegmentDto>();
 
-        string currentProc = registros[0];
+        string currentProc = registros[0].ProcessName;
+        DateTime currentStart = registros[0].DeviceTimestamp;
         int currentCount = 0;
+
+        TimelineSegmentDto CrearSegmento() => new TimelineSegmentDto
+        {
+            ProcessName = currentProc,
+            Label = currentProc == "idle.exe" ? "Inactividad" : currentProc,
+            Percentage = Math.Round(((double)currentCount / total) * 100, 2),
+            StartTime = AHoraPeru(currentStart).ToString("HH:mm")
+        };
 
         for (int i = 0; i < total; i++)
         {
-            if (registros[i] == currentProc)
+            if (registros[i].ProcessName == currentProc)
             {
                 currentCount++;
             }
             else
             {
-                segments.Add(new TimelineSegmentDto
-                {
-                    ProcessName = currentProc,
-                    Label = currentProc == "idle.exe" ? "Inactividad" : currentProc,
-                    Percentage = Math.Round(((double)currentCount / total) * 100, 2)
-                });
-                currentProc = registros[i];
+                segments.Add(CrearSegmento());
+                currentProc = registros[i].ProcessName;
+                currentStart = registros[i].DeviceTimestamp;
                 currentCount = 1;
             }
 
             if (i == total - 1)
             {
-                segments.Add(new TimelineSegmentDto
-                {
-                    ProcessName = currentProc,
-                    Label = currentProc == "idle.exe" ? "Inactividad" : currentProc,
-                    Percentage = Math.Round(((double)currentCount / total) * 100, 2)
-                });
+                segments.Add(CrearSegmento());
             }
         }
 

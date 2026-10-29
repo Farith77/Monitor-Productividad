@@ -5,6 +5,9 @@ import DeviceTable from '../components/dashboard/DeviceTable';
 import AppUsageChart from '../components/dashboard/AppUsageChart';
 import ContextSwitchChart from '../components/dashboard/ContextSwitchChart';
 import { dashboardService } from '../services/dashboardService';
+import DateFilter from '../components/dashboard/DateFilter';
+import { useSelectedDate } from '../hooks/useSelectedDate';
+import { formatFechaLarga } from '../utils/dateUtils';
 
 const formatMinutes = (totalMinutes) => {
   if (!totalMinutes || totalMinutes === 0) return "0m";
@@ -22,8 +25,8 @@ export default function DashboardPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fecha calendario en hora de Perú (toISOString usa UTC y cambia de día a las 19:00)
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  // Fecha seleccionada (por defecto hoy en hora de Perú), persistida en ?fecha=
+  const { selectedDate, setSelectedDate, isToday } = useSelectedDate();
 
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
@@ -32,10 +35,10 @@ export default function DashboardPage() {
       
       // Consultamos concurrentemente las métricas pulidas del backend para cada PC
       const statsPromises = devs.map(async (d) => {
-        const resumen = await dashboardService.getResumen(d.macAddress, today).catch(() => null);
-        const apps = await dashboardService.getDistribucion(d.macAddress, today).catch(() => []);
-        const windows = await dashboardService.getDistribucionVentanas(d.macAddress, today).catch(() => []);
-        const switches = await dashboardService.getTendenciaCambios(d.macAddress, today).catch(() => []);
+        const resumen = await dashboardService.getResumen(d.macAddress, selectedDate).catch(() => null);
+        const apps = await dashboardService.getDistribucion(d.macAddress, selectedDate).catch(() => []);
+        const windows = await dashboardService.getDistribucionVentanas(d.macAddress, selectedDate).catch(() => []);
+        const switches = await dashboardService.getTendenciaCambios(d.macAddress, selectedDate).catch(() => []);
         return { mac: d.macAddress, user: d.rolAsignado || 'Por asignar', resumen, apps, windows, switches };
       });
       const stats = await Promise.all(statsPromises);
@@ -113,13 +116,15 @@ export default function DashboardPage() {
     } finally {
       if (showLoader) setIsLoading(false);
     }
-  }, [today]);
+  }, [selectedDate]);
 
   useEffect(() => {
     fetchData(true);
+    // Solo refrescamos en vivo si se consulta el día de hoy
+    if (!isToday) return;
     const intervalId = setInterval(() => fetchData(false), 10000);
     return () => clearInterval(intervalId);
-  }, [fetchData]);
+  }, [fetchData, isToday]);
 
   // Cálculos para la barra de Actividad vs Inactividad
   const totalTime = globalMetrics.totalActiveMins + globalMetrics.totalIdleMins;
@@ -133,8 +138,9 @@ export default function DashboardPage() {
         <div className="flex justify-between items-start">
           <div>
             <h1 className="text-2xl font-normal text-slate-900">Panel de productividad</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Fecha: {today}</p>
+            <p className="text-sm text-slate-500 mt-0.5">{formatFechaLarga(selectedDate)}</p>
           </div>
+          <DateFilter value={selectedDate} onChange={setSelectedDate} />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

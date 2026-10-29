@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 export default function DeviceTable({ devices }) {
+  const location = useLocation();
   if (!devices || devices.length === 0) {
     return <div className="p-8 text-center text-sm text-slate-500">No hay dispositivos registrados aún.</div>;
   }
@@ -21,7 +22,7 @@ export default function DeviceTable({ devices }) {
           {devices.map((dev, i) => (
             <tr key={i} className="text-slate-800">
               <td className="py-4 font-mono text-xs text-slate-600">
-                <Link to={`/device/${dev.mac}`} className="text-blue-600 hover:underline">
+                <Link to={{ pathname: `/device/${dev.mac}`, search: location.search }} className="text-blue-600 hover:underline">
                   {dev.mac}
                 </Link>
               </td>

@@ -5,6 +5,9 @@ import Card from '../components/dashboard/Card';
 import ContextTimeline from '../components/dashboard/ContextTimeline';
 import AppUsageChart from '../components/dashboard/AppUsageChart';
 import { dashboardService } from '../services/dashboardService';
+import DateFilter from '../components/dashboard/DateFilter';
+import { useSelectedDate } from '../hooks/useSelectedDate';
+import { formatFechaLarga } from '../utils/dateUtils';
 
 const formatMinutes = (totalMinutes) => {
   if (!totalMinutes || totalMinutes === 0) return "0m";
@@ -59,19 +62,19 @@ export default function DeviceDetailPage() {
   const [bgStats, setBgStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fecha calendario en hora de Perú (toISOString usa UTC y cambia de día a las 19:00)
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  // Fecha seleccionada (por defecto hoy en hora de Perú), persistida en ?fecha=
+  const { selectedDate, setSelectedDate, isToday, search } = useSelectedDate();
 
   const fetchData = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
     try {
       // BLINDAJE: Si una petición falla, retorna null/[] y no destruye a las demás
       const [resumenData, registrosData, lineaData, distribucionData, bgStatsData] = await Promise.all([
-        dashboardService.getResumen(mac, today).catch(() => null),
-        dashboardService.getRegistros(mac, today).catch(() => []),
-        dashboardService.getLineaTiempo(mac, today).catch(() => []),
-        dashboardService.getDistribucion(mac, today).catch(() => []),
-        dashboardService.getBackgroundStats(mac, today).catch(() => null)
+        dashboardService.getResumen(mac, selectedDate).catch(() => null),
+        dashboardService.getRegistros(mac, selectedDate).catch(() => []),
+        dashboardService.getLineaTiempo(mac, selectedDate).catch(() => []),
+        dashboardService.getDistribucion(mac, selectedDate).catch(() => []),
+        dashboardService.getBackgroundStats(mac, selectedDate).catch(() => null)
       ]);
       
       setResumen(resumenData);
@@ -86,6 +89,7 @@ export default function DeviceDetailPage() {
       const formattedTimeline = lineaData.map(seg => ({
         label: seg.label,
         percentage: seg.percentage,
+        startTime: seg.startTime,
         color: getProcessColor(seg.processName)
       }));
       setLineaTiempo(formattedTimeline);
@@ -94,22 +98,24 @@ export default function DeviceDetailPage() {
     } finally {
       if (showLoader) setIsLoading(false);
     }
-  }, [mac, today]);
+  }, [mac, selectedDate]);
 
   useEffect(() => {
     if (mac) {
       fetchData(true);
+      // Solo refrescamos en vivo si se consulta el día de hoy
+      if (!isToday) return;
       const intervalId = setInterval(() => fetchData(false), 10000);
       return () => clearInterval(intervalId);
     }
-  }, [mac, fetchData]);
+  }, [mac, fetchData, isToday]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans text-slate-800">
       <div className="max-w-6xl mx-auto space-y-6">
         
         <div className="flex flex-col gap-4 mb-2">
-          <Link to="/" className="inline-flex items-center text-sm text-slate-500 hover:text-blue-600 transition-colors w-fit">
+          <Link to={{ pathname: "/", search: search ? `?${search}` : "" }} className="inline-flex items-center text-sm text-slate-500 hover:text-blue-600 transition-colors w-fit">
             <ArrowLeft className="w-4 h-4 mr-1" />
             Volver al panel general
           </Link>
@@ -119,8 +125,9 @@ export default function DeviceDetailPage() {
                 <h1 className="text-2xl font-medium text-slate-900">Dispositivo</h1>
                 <span className="text-lg text-slate-700 font-mono tracking-tight">{mac}</span>
               </div>
-              <p className="text-sm text-slate-500">Fecha consultada: {today}</p>
+              <p className="text-sm text-slate-500">{formatFechaLarga(selectedDate)}</p>
             </div>
+            <DateFilter value={selectedDate} onChange={setSelectedDate} />
           </div>
         </div>
 
@@ -146,15 +153,15 @@ export default function DeviceDetailPage() {
         <Card title="Linea de tiempo" icon={Activity}>
           <div className="mt-4">
             {lineaTiempo.length > 0 ? (
-              <>
-                <ContextTimeline segments={lineaTiempo} />
-                <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono font-medium">
-                  <span>{resumen?.firstRecordTime || "--:--"}</span>
-                  <span>{resumen?.lastRecordTime || "--:--"}</span>
-                </div>
-              </>
-            ) : (
+              <ContextTimeline
+                segments={lineaTiempo}
+                firstTime={resumen?.firstRecordTime}
+                lastTime={resumen?.lastRecordTime}
+              />
+            ) : isLoading ? (
               <div className="h-6 w-full bg-slate-100 rounded animate-pulse"></div>
+            ) : (
+              <div className="h-6 flex items-center justify-center text-slate-400 text-sm">Sin registros para este día</div>
             )}
           </div>
         </Card>

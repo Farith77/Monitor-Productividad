@@ -5,6 +5,7 @@ public class TimelineSegmentDto
     public string Label { get; set; } = string.Empty;
     public double Percentage { get; set; }
     public string ProcessName { get; set; } = string.Empty;
+    public string StartTime { get; set; } = string.Empty; // Hora Perú "HH:mm" de inicio del segmento
 }
 
 public class HourlySwitchDto
